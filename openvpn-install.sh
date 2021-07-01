@@ -1,7 +1,7 @@
 #!/bin/bash
 # shellcheck disable=SC1091,SC2164,SC2034,SC1072,SC1073,SC1009
 
-# Secure OpenVPN server installer for Debian, Ubuntu, CentOS, Amazon Linux 2, Fedora, Oracle Linux 8 and Arch Linux
+# Secure OpenVPN server installer for Debian, Ubuntu, CentOS, Amazon Linux 2, Fedora, Oracle Linux 8, OpenSuSE and Arch Linux
 # https://github.com/angristan/openvpn-install
 
 function isRoot() {
@@ -86,8 +86,19 @@ function checkOS() {
 		fi
 	elif [[ -e /etc/arch-release ]]; then
 		OS=arch
+	elif [[ -e /etc/os-release ]]; then
+		source /etc/os-release
+
+		if [[ $ID == "opensuse-leap" ]]; then
+			OS="opensuse"
+			if [ "$(echo "${VERSION_ID} < 15.2" | bc)" -eq 1 ]; then
+				echo "⚠️ Your version of OpenSUSE is not supported."
+				echo ""
+				exit 1
+			fi
+		fi
 	else
-		echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2, Oracle Linux 8 or Arch Linux system"
+		echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2, Oracle Linux 8, OpenSuSE or Arch Linux system"
 		exit 1
 	fi
 }
@@ -139,6 +150,15 @@ prefetch: yes' >>/etc/unbound/unbound.conf
 			sed -i 's|# hide-version: no|hide-version: yes|' /etc/unbound/unbound.conf
 			sed -i 's|# use-caps-for-id: no|use-caps-for-id: yes|' /etc/unbound/unbound.conf
 
+		elif [[ $OS == "opensuse" ]]; then
+			zypper install -y unbound
+
+			# Configuration
+			sed -i 's|# interface: 0.0.0.0$|interface: 10.8.0.1|' /etc/unbound/unbound.conf
+			sed -i 's|# access-control: 127.0.0.0/8 allow|access-control: 10.8.0.1/24 allow|' /etc/unbound/unbound.conf
+			sed -i 's|# hide-identity: no|hide-identity: yes|' /etc/unbound/unbound.conf
+			sed -i 's|# hide-version: no|hide-version: yes|' /etc/unbound/unbound.conf
+
 		elif [[ $OS == "arch" ]]; then
 			pacman -Syu --noconfirm unbound
 
@@ -174,7 +194,7 @@ prefetch: yes' >>/etc/unbound/unbound.conf
 access-control: fd42:42:42:42::/112 allow' >>/etc/unbound/unbound.conf
 		fi
 
-		if [[ ! $OS =~ (fedora|centos|amzn|oracle) ]]; then
+		if [[ ! $OS =~ (fedora|centos|amzn|oracle|opensuse) ]]; then
 			# DNS Rebinding fix
 			echo "private-address: 10.0.0.0/8
 private-address: fd42:42:42:42::/112
@@ -682,6 +702,8 @@ function installOpenVPN() {
 			yum install -y openvpn iptables openssl wget ca-certificates curl
 		elif [[ $OS == 'fedora' ]]; then
 			dnf install -y openvpn iptables openssl wget ca-certificates curl policycoreutils-python-utils
+		elif [[ $OS == 'opensuse' ]]; then
+			zypper install -y openvpn iptables openssl wget ca-certificates curl
 		elif [[ $OS == 'arch' ]]; then
 			# Install required dependencies and upgrade the system
 			pacman --needed --noconfirm -Syu openvpn iptables openssl wget ca-certificates curl
@@ -921,7 +943,7 @@ verb 3" >>/etc/openvpn/server.conf
 	fi
 
 	# Finally, restart and enable OpenVPN
-	if [[ $OS == 'arch' || $OS == 'fedora' || $OS == 'centos' || $OS == 'oracle' ]]; then
+	if [[ $OS == 'arch' || $OS == 'fedora' || $OS == 'centos' || $OS == 'oracle' || $OS == 'opensuse' ]]; then
 		# Don't modify package-provided service
 		cp /usr/lib/systemd/system/openvpn-server@.service /etc/systemd/system/openvpn-server@.service
 
@@ -1213,6 +1235,8 @@ function removeUnbound() {
 			yum remove -y unbound
 		elif [[ $OS == 'fedora' ]]; then
 			dnf remove -y unbound
+		elif [[ $OS == 'opensuse' ]]; then
+			zypper remove -y unbound
 		fi
 
 		rm -rf /etc/unbound/
@@ -1235,7 +1259,7 @@ function removeOpenVPN() {
 		PROTOCOL=$(grep '^proto ' /etc/openvpn/server.conf | cut -d " " -f 2)
 
 		# Stop OpenVPN
-		if [[ $OS =~ (fedora|arch|centos|oracle) ]]; then
+		if [[ $OS =~ (fedora|arch|centos|oracle|opensuse) ]]; then
 			systemctl disable openvpn-server@server
 			systemctl stop openvpn-server@server
 			# Remove customised service
@@ -1280,6 +1304,8 @@ function removeOpenVPN() {
 			yum remove -y openvpn
 		elif [[ $OS == 'fedora' ]]; then
 			dnf remove -y openvpn
+		elif [[ $OS == 'opensuse' ]]; then
+			zypper remove -y openvpn
 		fi
 
 		# Cleanup

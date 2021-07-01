@@ -20,6 +20,7 @@ jobs:
           - fedora-33-x64
           - centos-7-x64
           - centos-8-x64
+          - opensuse-15.3-x64
     steps:
       - uses: actions/checkout@v2.3.4
 
@@ -75,6 +76,15 @@ jobs:
           username: root
           key: ${{ secrets.SSH_KEY }}
           script: set -x && yum install -y git
+		  
+	  - name: Setup remote server (OpenSUSE)
+	    if: steps.server_os.outputs.value == 'opensuse'
+	    uses: appleboy/ssh-action@v0.1.4
+	    with:
+	      host: ${{ steps.server_ip.outputs.value }}
+	      username: root
+	      key: ${{ secrets.SSH_KEY }}
+	      script: set -x && zypper install -y git
 
       - name: Download repo and checkout current commit
         uses: appleboy/ssh-action@v0.1.4
